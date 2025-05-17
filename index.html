@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elgouwel - Agent d'Accueil du Théâtre Régional de Mascara</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .chat-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background-color: #e1f5fe;
+            text-align: right;
+        }
+        .bot-message {
+            background-color: #f1f1f1;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .status {
+            font-style: italic;
+            color: #666;
+            margin-top: 10px;
+        }
+        .language-selector {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Elgouwel - Agent d'Accueil du Théâtre Régional de Mascara</h1>
+    
+    <div class="language-selector">
+        <label for="language">Langue:</label>
+        <select id="language">
+            <option value="fr-FR">Français</option>
+            <option value="ar-DZ">Arabe</option>
+            <option value="en-US">Anglais</option>
+        </select>
+    </div>
+    
+    <div class="chat-container">
+        <div class="chat-messages" id="chat-messages">
+            <div class="message bot-message">
+                Bonjour ! Je suis Elgouwel, votre agent d'accueil virtuel au Théâtre Régional de Mascara. Comment puis-je vous aider aujourd'hui ?
+            </div>
+        </div>
+        
+        <div class="controls">
+            <input type="text" id="text-input" placeholder="Écrivez votre message ici...">
+            <button id="send-button">Envoyer</button>
+            <button id="voice-button">🎤 Parler</button>
+        </div>
+        
+        <div class="status" id="status"></div>
+    </div>
+    
+    <script>
+        // URL de votre webhook n8n (à remplacer par votre URL réelle)
+        const webhookUrl = 'VOTRE_URL_WEBHOOK_N8N';
+        
+        // Éléments DOM
+        const chatMessages = document.getElementById('chat-messages');
+        const textInput = document.getElementById('text-input');
+        const sendButton = document.getElementById('send-button');
+        const voiceButton = document.getElementById('voice-button');
+        const statusElement = document.getElementById('status');
+        const languageSelect = document.getElementById('language');
+        
+        // Reconnaissance vocale
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        
+        // Synthèse vocale
+        const synth = window.speechSynthesis;
+        
+        // Fonction pour ajouter un message au chat
+        function addMessage(text, isUser) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+            messageDiv.classList.add(isUser ? 'user-message' : 'bot-message');
+            messageDiv.textContent = text;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // Fonction pour envoyer un message à n8n
+        async function sendMessage(text) {
+            addMessage(text, true);
+            statusElement.textContent = "Envoi de votre message...";
+            
+            try {
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: text })
+                });
+                
+                const data = await response.json();
+                const botResponse = data.response || "Désolé, je n'ai pas pu traiter votre demande.";
+                
+                addMessage(botResponse, false);
+                speakText(botResponse);
+                statusElement.textContent = "";
+            } catch (error) {
+                console.error('Erreur:', error);
+                statusElement.textContent = "Erreur de communication avec le serveur.";
+            }
+        }
+        
+        // Fonction pour parler un texte
+        function speakText(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = languageSelect.value;
+            synth.speak(utterance);
+        }
+        
+        // Événement pour le bouton d'envoi
+        sendButton.addEventListener('click', () => {
+            const text = textInput.value.trim();
+            if (text) {
+                sendMessage(text);
+                textInput.value = '';
+            }
+        });
+        
+        // Événement pour la touche Entrée
+        textInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendButton.click();
+            }
+        });
+        
+        // Événement pour le bouton vocal
+        voiceButton.addEventListener('click', () => {
+            recognition.lang = languageSelect.value;
+            recognition.start();
+            statusElement.textContent = "Écoute en cours...";
+        });
+        
+        // Événements de reconnaissance vocale
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            textInput.value = transcript;
+            statusElement.textContent = "Vous avez dit: " + transcript;
+            sendButton.click();
+        };
+        
+        recognition.onerror = (event) => {
+            statusElement.textContent = "Erreur de reconnaissance: " + event.error;
+        };
+        
+        recognition.onend = () => {
+            if (statusElement.textContent === "Écoute en cours...") {
+                statusElement.textContent = "Aucune parole détectée.";
+            }
+        };
+    </script>
+</body>
+</html>
